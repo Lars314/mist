@@ -6,6 +6,22 @@ import os
 import json
 from scipy import stats
 from scipy.optimize import curve_fit
+import re
+
+def prepare_LIDA_df(lab_path, wn_min, wn_max):
+    df = pd.read_csv(lab_path, delim_whitespace=True,
+                     names=["wavenumber", "absorbance"])
+    df = df[(df['wavenumber'] > wn_min) &
+            (df['wavenumber']< wn_max)].copy(deep=False)
+    df['tau'] = df['absorbance']*np.log(10)
+    return df
+
+def prepare_Catania_df(lab_path, wn_min, wn_max):
+    df = pd.read_csv(lab_path, engine="python", skiprows=20, header=None,
+                     delim_whitespace=True, names=["wavenumber", "tau"])
+    df = df[(df['wavenumber'] > wn_min) &
+            (df['wavenumber']< wn_max)].copy(deep=False)
+    return df
 
 def evaluate_fit(ydata, yfit):
     """
@@ -26,10 +42,36 @@ def evaluate_fit(ydata, yfit):
 
     return chi2, redchi2, p, r2
 
-def show_spectra(directory, lower, upper, do_vlines=True,
+def _atoi(text):
+    """
+    Implement natural sorting as from:
+    https://stackoverflow.com/questions/5967500/how-to-correctly-sort-a-string-with-a-number-inside
+    """
+    return int(text) if text.isdigit() else text
+
+def _natural_keys(text):
+    """
+    Implement natural sorting as from:
+    https://stackoverflow.com/questions/5967500/how-to-correctly-sort-a-string-with-a-number-inside
+    """
+    return [ _atoi(c) for c in re.split(r'(\d+)', text) ]
+
+def show_spectra(directory, wn_min, wn_max, do_vlines=False,
                  database="LIDA", t=None, n=None):
     """
     Plots the spectra at many temperatures
+    -------- Parameters --------
+    directory : the path to the folder with the spectra you want to see
+    wn_min : the lower limit on wavenumber for plotting
+    wn_max : the upper limit on wavenumber for plotting
+    do_vlines : I was looking at the bending mode of CO2, this turns on or off
+                vertical lines at the split peaks
+    database : "LIDA" or "Catania", tells MIST how to read the data files
+               depending on which database (and therefore format) they are from
+    t : if using the LIDA database, you can set t to a specific temperature
+        to just plot that spectrum
+    n : if using the Catania database, you can set n to a specific name to just
+        plot that spectrum
     """
 
     plt.rc('font', size=14)
@@ -39,7 +81,9 @@ def show_spectra(directory, lower, upper, do_vlines=True,
 
     data = []
     max_temp = 1
-    for fname in os.listdir(directory):
+    fnames = os.listdir(directory)
+    fnames.sort(key=_natural_keys)
+    for fname in fnames:
         if fname == ".ipynb_checkpoints":
             continue
         path = directory + "/" + fname
@@ -48,8 +92,8 @@ def show_spectra(directory, lower, upper, do_vlines=True,
             if t != None:
                 if float(fname[:-5]) != t:
                     continue
-            this_df = self._prepare_LIDA_df(path)
-            data.append({"temp":float(fname[:-5]), "df":this_df})
+            this_df = prepare_LIDA_df(path, wn_min, wn_max)
+            data.append({"name":fname[:-4], "df":this_df})
             if float(fname[:-5]) > max_temp:
                 max_temp = float(fname[:-5])
 
@@ -57,7 +101,7 @@ def show_spectra(directory, lower, upper, do_vlines=True,
             if n != None:
                 if fname[:-4] != n:
                     continue
-            this_df = self._flatt_Catania_df(path)
+            this_df = prepare_Catania_df(path, wn_min, wn_max)
             data.append({"name":fname[:-4], "df":this_df})
 
 
@@ -68,16 +112,16 @@ def show_spectra(directory, lower, upper, do_vlines=True,
         ax.axvline(661.25, color="xkcd:grey", linestyle="--")
         ax.axvline(654.59, color="xkcd:grey", linestyle="--")
 
-    if database == "LIDA" or database == "lida":
+    """    if database == "LIDA" or database == "lida":
         for spec in data:
             ax.plot(spec['df']['wavenumber'], spec['df']['tau'],
                     label=str(spec['temp'])+"K")
-    else:
-        for spec in data:
-            ax.plot(spec['df']['wavenumber'], spec['df']['tau'],
-                    label=spec['name'])
+    else:"""
+    for spec in data:
+        ax.plot(spec['df']['wavenumber'], spec['df']['tau'],
+                label=spec['name'])
 
-    ax.set_xlim(upper, lower)
+    ax.set_xlim(wn_max, wn_min)
     ax.set_xlabel("wavenumber (1/cm)")
     ax.set_ylabel("Optical Depth")
     ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True,
@@ -206,29 +250,55 @@ class Fitter:
         """
         Reads a json file and extracts the components for this fit
         """
+        # load the json
         with open(self.path) as f:
             data = json.load(f)
             f.close()
-
+    
+        # assign the observed and lab components
         obs = data['observed']
         lab = data['lab']
 
-        # format the observed data into a dataframe, and add wavenumber column
+        # format the observed data into a dataframe
         if obs['name'] == "JWST Data Yang et al.":
             obs_df = pd.read_csv(obs["path"], sep=" \s+", engine='python')
             obs_df['wavenumber'] = (10**4)/(obs_df['wavelength(um)']+0.02)
             obs["df"] = obs_df
+            
         elif obs['name'] == "Elias 29":
-            obs_df = pd.read_csv(obs["path"], delim_whitespace=True,
+            # the data file from Sergio
+            df = pd.read_csv(obs["path"], delim_whitespace=True,
                                  names=["lambda (um)", "Flux (Jy)",
                                         "Sigma (Jy)", "AOT ident."], skiprows=6)
-            obs_df['wavenumber'] = (10**4)/(obs_df['lambda (um)']+0.02)
-            plot_df = obs_df[(obs_df['lambda (um)'] > 2.55) & (obs_df['lambda (um)'] < 17) & (obs_df['Flux (Jy)'] > 0)]
-            cont = pd.read_csv("./data/all_SED/2.txt", delim_whitespace=True, names=['wavenumber (um)', 'Flux (Jy)'])
-            interp_cont = np.interp(x=plot_df['lambda (um)'], xp=cont['wavenumber (um)'], fp=cont['Flux (Jy)'])
-            plot_df['tau'] = [-np.log(fo/fc) for fo, fc in zip(plot_df['Flux (Jy)'], interp_cont)]
-            plot_df['error_tau'] = [sigf/f for f, sigf in zip(plot_df['Flux (Jy)'], plot_df['Sigma (Jy)'])]
-            obs["df"] = plot_df
+            # convert um to wavenumbers
+            df['wavenumber'] = (10**4)/(df['lambda (um)']+0.02)
+            
+            # apply limits
+            obs_df = df[(df['wavenumber'] > self.wn_min) & \
+                        (df['wavenumber'] < self.wn_max)].copy(deep=True)
+
+            # this file is in flux units, we need to get optical depth.
+            # to do that we use the formula tau = -ln(fo/fc) where tau is the
+            # optical depth, fo is the observed flux, and fc is the continuum
+            
+            # read the continuum, taken from LIDA
+            cont = pd.read_csv("./data/all_SED/2.txt", delim_whitespace=True,
+                               names=['wavenumber (um)', 'Flux (Jy)'])
+            # we need Fo and Fc to match in wavenumber space, so interpolate
+            interp_cont = np.interp(x=obs_df['lambda (um)'],
+                                    xp=cont['wavenumber (um)'],
+                                    fp=cont['Flux (Jy)'])
+            # now we can calculate tau
+            obs_df['tau'] = [-np.log(fo/fc) for fo, fc in \
+                             zip(obs_df['Flux (Jy)'], interp_cont)]
+            # also calculate its error
+            obs_df['error_tau'] = [sigf/f for f, sigf in \
+                                   zip(obs_df['Flux (Jy)'],
+                                       obs_df['Sigma (Jy)'])]
+            obs["df"] = obs_df
+
+        else:
+            print("Observational Data {0} not recognized.".format(obs['name']))
 
         # format the lab data
         nonzero_components = []
@@ -237,12 +307,14 @@ class Fitter:
             if spectrum['weight'] != 0:
                 # get the lab data into dataframes with the right wavenumber limits
                 if spectrum['database'] == "LIDA":
-                    spectrum['df'] = self._prepare_LIDA_df(spectrum['path'])
+                    spectrum['df'] = prepare_LIDA_df(spectrum['path'],
+                                                     self.wn_min, self.wn_max)
                     spectrum['df']['flattened_tau']= self._flatten(spectrum['df'],
                                                              n_upper=spectrum['n_upper'],
                                                              n_lower=spectrum['n_lower'])
                 elif spectrum['database'] == "Catania":
-                    spectrum['df'] = self._prepare_Catania_df(spectrum['path'])
+                    spectrum['df'] = prepare_Catania_df(spectrum['path'],
+                                                       self.wn_min, self.wn_max)
                     # flatten the lab data, removing any non-zero baseline
                     #spectrum['df']['flattened_tau'] = spectrum['df']['tau']
                     spectrum['df']['flattened_tau']= self._flatten(spectrum['df'],
@@ -259,39 +331,60 @@ class Fitter:
         #print("The model name is: \n" + model_name)
 
         return obs, nonzero_components, model_name
+    
+    def _one_component_model(self, wavenumbers, w0):
+        """
+        Creates a one component model in a way that can be used with scipy's
+        curve_fit. The components must be in "spectra.json", and the weights there
+        will be overridden and computed based on the fit
+        """
+        self.lab[0]['weight'] = w0
+
+        self.model = self.add_curves()
+
+        return self.model['tau']
+    
+    def _two_component_model(self, wavenumbers, w0, w1):
+        """
+        Creates a two component model in a way that can be used with scipy's
+        curve_fit. The components must be in "spectra.json", and the weights there
+        will be overridden and computed based on the fit
+        """
+        self.lab[0]['weight'] = w0
+        self.lab[1]['weight'] = w1
+
+        self.model = self.add_curves()
+
+        return self.model['tau']
 
     def _three_component_model(self, wavenumbers, w0, w1, w2):
         """
-        Creates a five component model in a way that can be used with scipy's
+        Creates a three component model in a way that can be used with scipy's
         curve_fit. The components must be in "spectra.json", and the weights there
         will be overridden and computed based on the fit
         """
-        obs, lab, model_name = self._read_components(self.path)
+        self.lab[0]['weight'] = w0
+        self.lab[1]['weight'] = w1
+        self.lab[2]['weight'] = w2
 
-        lab[0]['weight'] = w0
-        lab[1]['weight'] = w1
-        lab[2]['weight'] = w2
+        self.model = self.add_curves()
 
-        model = add_curves(lab, wavenumbers)
-
-        return model['tau']
+        return self.model['tau']
 
     def _four_component_model(self, wavenumbers, w0, w1, w2, w3):
         """
-        Creates a five component model in a way that can be used with scipy's
+        Creates a four component model in a way that can be used with scipy's
         curve_fit. The components must be in "spectra.json", and the weights there
         will be overridden and computed based on the fit
         """
-        obs, lab, model_name = self._read_components(self.path)
+        self.lab[0]['weight'] = w0
+        self.lab[1]['weight'] = w1
+        self.lab[2]['weight'] = w2
+        self.lab[3]['weight'] = w3
 
-        lab[0]['weight'] = w0
-        lab[1]['weight'] = w1
-        lab[2]['weight'] = w2
-        lab[3]['weight'] = w3
+        self.model = self.add_curves()
 
-        model = add_curves(lab, wavenumbers)
-
-        return model['tau']
+        return self.model['tau']
 
     def _five_component_model(self, wavenumbers, w0, w1, w2, w3, w4):
         """
@@ -299,8 +392,6 @@ class Fitter:
         curve_fit. The components must be in "spectra.json", and the weights there
         will be overridden and computed based on the fit
         """
-        #obs, lab, model_name = self._read_components(self.path)
-
         self.lab[0]['weight'] = w0
         self.lab[1]['weight'] = w1
         self.lab[2]['weight'] = w2
@@ -317,14 +408,87 @@ class Fitter:
         curve_fit. The components must be in "spectra.json", and the weights there
         will be overridden and computed based on the fit
         """
-        #obs, lab, model_name = self._read_components(self.path)
-
         self.lab[0]['weight'] = w0
         self.lab[1]['weight'] = w1
         self.lab[2]['weight'] = w2
         self.lab[3]['weight'] = w3
         self.lab[4]['weight'] = w4
         self.lab[5]['weight'] = w5
+
+        self.model = self._add_curves()
+
+        return self.model['tau']
+    
+    def _seven_component_model(self, wavenumbers, w0, w1, w2, w3, w4, w5, w6):
+        """
+        Creates a seven component model in a way that can be used with scipy's
+        curve_fit. The components must be in "spectra.json", and the weights there
+        will be overridden and computed based on the fit
+        """
+        self.lab[0]['weight'] = w0
+        self.lab[1]['weight'] = w1
+        self.lab[2]['weight'] = w2
+        self.lab[3]['weight'] = w3
+        self.lab[4]['weight'] = w4
+        self.lab[5]['weight'] = w5
+        self.lab[6]['weight'] = w6
+
+        self.model = self._add_curves()
+
+        return self.model['tau']
+    
+    def _eight_component_model(self, wavenumbers, w0, w1, w2, w3, w4, w5, w6, w7):
+        """
+        Creates an eight component model in a way that can be used with scipy's
+        curve_fit
+        """
+        self.lab[0]['weight'] = w0
+        self.lab[1]['weight'] = w1
+        self.lab[2]['weight'] = w2
+        self.lab[3]['weight'] = w3
+        self.lab[4]['weight'] = w4
+        self.lab[5]['weight'] = w5
+        self.lab[6]['weight'] = w6
+        self.lab[7]['weight'] = w7
+
+        self.model = self._add_curves()
+
+        return self.model['tau']
+    
+    def _nine_component_model(self, wavenumbers, w0, w1, w2, w3, w4, w5, w6, w7, w8):
+        """
+        Creates a nine component model in a way that can be used with scipy's
+        curve_fit
+        """
+        self.lab[0]['weight'] = w0
+        self.lab[1]['weight'] = w1
+        self.lab[2]['weight'] = w2
+        self.lab[3]['weight'] = w3
+        self.lab[4]['weight'] = w4
+        self.lab[5]['weight'] = w5
+        self.lab[6]['weight'] = w6
+        self.lab[7]['weight'] = w7
+        self.lab[8]['weight'] = w8
+
+        self.model = self._add_curves()
+
+        return self.model['tau']
+    
+    def _ten_component_model(self, wavenumbers, w0, w1, w2, w3, w4, w5, w6, w7, w8, w9):
+        """
+        Creates a ten component model in a way that can be used with scipy's
+        curve_fit
+        """
+        self.lab[0]['weight'] = w0
+        self.lab[1]['weight'] = w1
+        self.lab[2]['weight'] = w2
+        self.lab[3]['weight'] = w3
+        self.lab[4]['weight'] = w4
+        self.lab[5]['weight'] = w5
+        self.lab[6]['weight'] = w6
+        self.lab[7]['weight'] = w7
+        self.lab[8]['weight'] = w8
+        self.lab[9]['weight'] = w9
 
         self.model = self._add_curves()
 
@@ -361,7 +525,7 @@ class Fitter:
                 combined['tau'] = [y1 + y2 for y1, y2 in zip(combined['tau'], interp_tau)]
         return combined
 
-    def plot_spectra(self, save_model=True, do_vlines=True, do_eval=True):
+    def plot_spectra(self, save_model=False, do_vlines=False, do_eval=True):
         """
         Makes a plot
         """
@@ -392,8 +556,9 @@ class Fitter:
         # plot the combined curve
         ax.plot(self.fit_curve['wavenumber'], self.fit_curve['tau'], label="Model", color="xkcd:black", linewidth=3, alpha=1)
 
-        #ax.set_xlim(self.wn_max, self.wn_min)
+        #ax.set_xlim(self.wn_min, self.wn_max)
         ax.invert_xaxis()
+        ax.invert_yaxis()
         ax.set_xlabel("wavenumber (1/cm)")
         ax.set_ylabel("Optical Depth");
         ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True,
@@ -420,7 +585,30 @@ class Fitter:
         ydata = self.obs['df']['tau']
 
         n = len(p0)
-        if n == 6:
+        if n == 10:
+            popt, pcov = curve_fit(self._ten_component_model, xdata, ydata,
+                                   bounds=(0, 100), p0=p0)
+            model = self._ten_component_model(xdata, popt[0], popt[1], popt[2],
+                                        popt[3], popt[4], popt[5], popt[6],
+                                        popt[7], popt[8], popt[9])
+        elif n == 9:
+            popt, pcov = curve_fit(self._nine_component_model, xdata, ydata,
+                                   bounds=(0, 100), p0=p0)
+            model = self._nine_component_model(xdata, popt[0], popt[1], popt[2],
+                                        popt[3], popt[4], popt[5], popt[6],
+                                        popt[7], popt[8])
+        elif n == 8:
+            popt, pcov = curve_fit(self._eight_component_model, xdata, ydata,
+                                   bounds=(0, 100), p0=p0)
+            model = self._eight_component_model(xdata, popt[0], popt[1], popt[2],
+                                        popt[3], popt[4], popt[5], popt[6],
+                                        popt[7])
+        elif n == 7:
+            popt, pcov = curve_fit(self._seven_component_model, xdata, ydata,
+                                   bounds=(0, 100), p0=p0)
+            model = self._seven_component_model(xdata, popt[0], popt[1], popt[2],
+                                        popt[3], popt[4], popt[5], popt[6])
+        elif n == 6:
             popt, pcov = curve_fit(self._six_component_model, xdata, ydata,
                                    bounds=(0, 100), p0=p0)
             model = self._six_component_model(xdata, popt[0], popt[1], popt[2],
@@ -439,6 +627,16 @@ class Fitter:
             popt, pcov = curve_fit(self._three_component_model, xdata, ydata,
                                    bounds=(0, 100), p0=p0)
             model = self._three_component_model(xdata, popt[0], popt[1], popt[2])
+        elif n == 2:
+            popt, pcov = curve_fit(self._two_component_model, xdata, ydata,
+                                   bounds=(0, 100), p0=p0)
+            model = self._two_component_model(xdata, popt[0], popt[1])
+        elif n == 1:
+            popt, pcov = curve_fit(self._one_component_model, xdata, ydata,
+                                   bounds=(0, 100), p0=p0)
+            model = self._one_component_model(xdata, popt[0])
+        else:
+            print("{0} component model is not supported".format(n))
 
         # update the model with the new weights
         for i in range(0, len(self.lab)):
