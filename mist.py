@@ -124,6 +124,7 @@ def show_spectra(directory, wn_min, wn_max, do_vlines=False,
     ax.set_xlim(wn_max, wn_min)
     ax.set_xlabel("wavenumber (1/cm)")
     ax.set_ylabel("Optical Depth")
+    ax.invert_yaxis()
     ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True,
               ncol=5, framealpha=0, fontsize=12)
     plt.close()
