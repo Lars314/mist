@@ -263,7 +263,7 @@ class Fitter:
         # format the observed data into a dataframe
         if obs['name'] == "JWST Data Yang et al.":
             obs_df = pd.read_csv(obs["path"], sep=" \s+", engine='python')
-            obs_df['wavenumber'] = (10**4)/(obs_df['wavelength(um)']+0.02)
+            obs_df['wavenumber'] = (10**4)/(obs_df['wavelength(um)'])
             obs["df"] = obs_df
             
         elif obs['name'] == "Elias 29":
@@ -272,7 +272,7 @@ class Fitter:
                                  names=["lambda (um)", "Flux (Jy)",
                                         "Sigma (Jy)", "AOT ident."], skiprows=6)
             # convert um to wavenumbers
-            df['wavenumber'] = (10**4)/(df['lambda (um)']+0.02)
+            df['wavenumber'] = (10**4)/(df['lambda (um)'])
             
             # apply limits
             obs_df = df[(df['wavenumber'] > self.wn_min) & \

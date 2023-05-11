@@ -263,7 +263,7 @@ class Fitter:
         # format the observed data into a dataframe
         if obs['name'] == "JWST Data Yang et al.":
             obs_df = pd.read_csv(obs["path"], sep=" \s+", engine='python')
-            obs_df['wavenumber'] = (10**4)/(obs_df['wavelength(um)']+0.02)
+            obs_df['wavenumber'] = (10**4)/(obs_df['wavelength(um)'])
             obs["df"] = obs_df
             
         elif obs['name'] == "Elias 29":
@@ -272,7 +272,7 @@ class Fitter:
                                  names=["lambda (um)", "Flux (Jy)",
                                         "Sigma (Jy)", "AOT ident."], skiprows=6)
             # convert um to wavenumbers
-            df['wavenumber'] = (10**4)/(df['lambda (um)']+0.02)
+            df['wavenumber'] = (10**4)/(df['lambda (um)'])
             
             # apply limits
             obs_df = df[(df['wavenumber'] > self.wn_min) & \
@@ -555,15 +555,16 @@ class Fitter:
                                                      spectrum['name']), alpha=0.75)
 
         # plot the combined curve
-        ax.plot(self.fit_curve['wavenumber'], self.fit_curve['tau'], label="Model", color="xkcd:black", linewidth=3, alpha=1)
+        ax.plot(self.fit_curve['wavenumber'], self.fit_curve['tau'],
+                label="Model", color="xkcd:black", linewidth=3, alpha=1)
 
         #ax.set_xlim(self.wn_min, self.wn_max)
         ax.invert_xaxis()
         ax.invert_yaxis()
         ax.set_xlabel("wavenumber (1/cm)")
         ax.set_ylabel("Optical Depth");
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True,
-                  ncol=3, framealpha=0, fontsize=12)
+        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15),
+                  fancybox=True, ncol=3, framealpha=0, fontsize=12)
 
         if do_eval:
             ydata = self.obs['df']['tau']
