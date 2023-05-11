@@ -130,20 +130,24 @@ def show_spectra(directory, wn_min, wn_max, do_vlines=False,
     plt.close()
     return fig
 
-def column_density(spec, ls=1):
-    """
-    Calculate column density in the optically thin limit
-    """
-    a = spec['weight']
-    ydata = [a*t for t in spec['df']['flattened_tau']]
-    xdata = list(spec['df']['wavenumber'])
+"""def column_density(spec, bs, wn_min, wn_max):
+"""
+#Calculate column density in the optically thin limit
+#This is currently broken
+"""
+a = spec['weight']
+df = spec['df'][(spec['df']['wavenumber'] > wn_min) &\
+                (spec['df']['wavenumber'] < wn_max)]
+ydata = [a*t for t in df['flattened_tau']]
+xdata = list(df['wavenumber'])
 
-    # numpy integration needs increasing functions
-    if xdata[1] < xdata[0]:
-        xdata = np.flip(xdata)
-        ydata = np.flip(ydata)
+# numpy integration needs increasing functions
+if xdata[1] < xdata[0]:
+    xdata = np.flip(xdata)
+    ydata = np.flip(ydata)
 
-    return ls*np.trapz(y=ydata, x=xdata)
+return bs*np.trapz(y=ydata, x=xdata)"""
+
 
 class Fitter:
     def __init__(self, spec_path, wn_min, wn_max):
@@ -160,6 +164,9 @@ class Fitter:
         # make combined spectrum
         combined = self._add_curves()
         self.fit_curve = combined
+        
+        # calculate column densities
+        #self.column_density()
 
     def _prepare_LIDA_df(self, lab_path):
         df = pd.read_csv(lab_path, delim_whitespace=True,
@@ -293,7 +300,7 @@ class Fitter:
             obs_df['tau'] = [-np.log(fo/fc) for fo, fc in \
                              zip(obs_df['Flux (Jy)'], interp_cont)]
             # also calculate its error
-            obs_df['error_tau'] = [sigf/f for f, sigf in \
+            obs_df['error_tau'] = [np.abs(sigf/f) for f, sigf in \
                                    zip(obs_df['Flux (Jy)'],
                                        obs_df['Sigma (Jy)'])]
             obs["df"] = obs_df
@@ -310,9 +317,12 @@ class Fitter:
                 if spectrum['database'] == "LIDA":
                     spectrum['df'] = prepare_LIDA_df(spectrum['path'],
                                                      self.wn_min, self.wn_max)
-                    spectrum['df']['flattened_tau']= self._flatten(spectrum['df'],
-                                                             n_upper=spectrum['n_upper'],
-                                                             n_lower=spectrum['n_lower'])
+                    if spectrum['n_upper'] == "none" or spectrum['n_lower'] == "none":
+                        spectrum['df']['flattened_tau'] = spectrum['df']['tau']
+                    else:
+                        spectrum['df']['flattened_tau']= self._flatten(spectrum['df'],
+                                                                 n_upper=spectrum['n_upper'],
+                                                                 n_lower=spectrum['n_lower'])
                 elif spectrum['database'] == "Catania":
                     spectrum['df'] = prepare_Catania_df(spectrum['path'],
                                                        self.wn_min, self.wn_max)
@@ -525,6 +535,14 @@ class Fitter:
             else:
                 combined['tau'] = [y1 + y2 for y1, y2 in zip(combined['tau'], interp_tau)]
         return combined
+    
+    
+    def column_density(self):
+        """
+        Calculate the fitted column density
+        """
+        for spec in self.lab:
+            spec['fitted_cd'] = spec['weight']*spec['lab column density']
 
     def plot_spectra(self, save_model=False, do_vlines=False, do_eval=True):
         """
@@ -549,10 +567,10 @@ class Fitter:
             if weight == 0:
                 continue
             else:
+                this_label = "{0:.2f}*({1})".format(weight, spectrum['name'])
                 ax.plot(spectrum['df']['wavenumber'],
                         weight*spectrum['df']['flattened_tau'],
-                        label="{0:.4f}*({1})".format(weight,
-                                                     spectrum['name']), alpha=0.75)
+                        label=this_label, alpha=0.75)
 
         # plot the combined curve
         ax.plot(self.fit_curve['wavenumber'], self.fit_curve['tau'],
@@ -654,11 +672,14 @@ class Fitter:
         self.fit_curve = combined
         self.model_name = model_name
         self.p0 = p0
-        #return lab, combined, model_name, p0
+        
+        # update the fitted column density
+        #self.column_density()
         
     def analyze_components(self):
         """
         Compute the column densities of the different componenets
         """
 
-        self.col_d = None
+        for spec in self.lab:
+            spec['col_den'] = column_density(spec)
