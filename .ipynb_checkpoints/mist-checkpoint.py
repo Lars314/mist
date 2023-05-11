@@ -341,7 +341,7 @@ class Fitter:
         """
         self.lab[0]['weight'] = w0
 
-        self.model = self.add_curves()
+        self.model = self._add_curves()
 
         return self.model['tau']
     
@@ -354,7 +354,7 @@ class Fitter:
         self.lab[0]['weight'] = w0
         self.lab[1]['weight'] = w1
 
-        self.model = self.add_curves()
+        self.model = self._add_curves()
 
         return self.model['tau']
 
@@ -368,7 +368,7 @@ class Fitter:
         self.lab[1]['weight'] = w1
         self.lab[2]['weight'] = w2
 
-        self.model = self.add_curves()
+        self.model = self._add_curves()
 
         return self.model['tau']
 
@@ -383,7 +383,7 @@ class Fitter:
         self.lab[2]['weight'] = w2
         self.lab[3]['weight'] = w3
 
-        self.model = self.add_curves()
+        self.model = self._add_curves()
 
         return self.model['tau']
 

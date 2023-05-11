@@ -341,7 +341,7 @@ class Fitter:
         """
         self.lab[0]['weight'] = w0
 
-        self.model = self.add_curves()
+        self.model = self._add_curves()
 
         return self.model['tau']
     
@@ -354,7 +354,7 @@ class Fitter:
         self.lab[0]['weight'] = w0
         self.lab[1]['weight'] = w1
 
-        self.model = self.add_curves()
+        self.model = self._add_curves()
 
         return self.model['tau']
 
@@ -368,7 +368,7 @@ class Fitter:
         self.lab[1]['weight'] = w1
         self.lab[2]['weight'] = w2
 
-        self.model = self.add_curves()
+        self.model = self._add_curves()
 
         return self.model['tau']
 
@@ -383,7 +383,7 @@ class Fitter:
         self.lab[2]['weight'] = w2
         self.lab[3]['weight'] = w3
 
-        self.model = self.add_curves()
+        self.model = self._add_curves()
 
         return self.model['tau']
 
@@ -555,15 +555,16 @@ class Fitter:
                                                      spectrum['name']), alpha=0.75)
 
         # plot the combined curve
-        ax.plot(self.fit_curve['wavenumber'], self.fit_curve['tau'], label="Model", color="xkcd:black", linewidth=3, alpha=1)
+        ax.plot(self.fit_curve['wavenumber'], self.fit_curve['tau'],
+                label="Model", color="xkcd:black", linewidth=3, alpha=1)
 
         #ax.set_xlim(self.wn_min, self.wn_max)
         ax.invert_xaxis()
         ax.invert_yaxis()
         ax.set_xlabel("wavenumber (1/cm)")
         ax.set_ylabel("Optical Depth");
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True,
-                  ncol=3, framealpha=0, fontsize=12)
+        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15),
+                  fancybox=True, ncol=3, framealpha=0, fontsize=12)
 
         if do_eval:
             ydata = self.obs['df']['tau']
