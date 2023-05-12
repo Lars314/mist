@@ -9,6 +9,7 @@
             "path":"./data/laboratory/LIDA Ices/CO2_Ehrenfreund/10.0K.txt",
             "database":"LIDA",
             "weight":0.7,
+            "lab column density":3.17e17,
             "n_upper":50,
             "n_lower":50
         },
