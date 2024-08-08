@@ -18,6 +18,7 @@
             "path":"./data/laboratory/LIDA Ices/CO2+CH3OH_1_1_Ehrenfreund/10.0K.txt",
             "database":"LIDA",
             "weight":3.0,
+            "lab column density":2.5e17,
             "n_upper":30,
             "n_lower":20
         },

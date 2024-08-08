@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+plt.style.use('./mist.mplstyle')
 import matplotlib.colors
 import os
 import json
@@ -9,7 +10,7 @@ from scipy.optimize import curve_fit
 import re
 
 def prepare_LIDA_df(lab_path, wn_min, wn_max):
-    df = pd.read_csv(lab_path, delim_whitespace=True,
+    df = pd.read_csv(lab_path, sep=r'\s+',
                      names=["wavenumber", "absorbance"])
     df = df[(df['wavenumber'] > wn_min) &
             (df['wavenumber']< wn_max)].copy(deep=False)
@@ -18,7 +19,7 @@ def prepare_LIDA_df(lab_path, wn_min, wn_max):
 
 def prepare_Catania_df(lab_path, wn_min, wn_max):
     df = pd.read_csv(lab_path, engine="python", skiprows=20, header=None,
-                     delim_whitespace=True, names=["wavenumber", "tau"])
+                     sep=r"\s+", names=["wavenumber", "tau"])
     df = df[(df['wavenumber'] > wn_min) &
             (df['wavenumber']< wn_max)].copy(deep=False)
     return df
@@ -106,7 +107,8 @@ def show_spectra(directory, wn_min, wn_max, do_vlines=False,
 
 
     norm=plt.Normalize(0, max_temp)
-    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["blue", "violet", "red"])
+    cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
+        "", ["blue", "violet", "red"])
 
     if do_vlines:
         ax.axvline(661.25, color="xkcd:grey", linestyle="--")
@@ -169,7 +171,7 @@ class Fitter:
         #self.column_density()
 
     def _prepare_LIDA_df(self, lab_path):
-        df = pd.read_csv(lab_path, delim_whitespace=True,
+        df = pd.read_csv(lab_path, sep=r"\s+",
                          names=["wavenumber", "absorbance"])
         df = df[(df['wavenumber'] > self.wn_min) &
                 (df['wavenumber']< self.wn_max)].copy(deep=False)
@@ -178,7 +180,8 @@ class Fitter:
 
     def _prepare_Catania_df(self, lab_path):
         df = pd.read_csv(lab_path, engine="python", skiprows=20, header=None,
-                         delim_whitespace=True, names=["wavenumber", "tau"])
+                         sep=r"\s+", names=["wavenumber", "tau"])
+        #print(df)
         df = df[(df['wavenumber'] > self.wn_min) &
                 (df['wavenumber']< self.wn_max)].copy(deep=False)
         return df
@@ -269,13 +272,13 @@ class Fitter:
 
         # format the observed data into a dataframe
         if obs['name'] == "JWST Data Yang et al.":
-            obs_df = pd.read_csv(obs["path"], sep=" \s+", engine='python')
+            obs_df = pd.read_csv(obs["path"], sep=r"\s+", engine='python')
             obs_df['wavenumber'] = (10**4)/(obs_df['wavelength(um)'])
             obs["df"] = obs_df
             
         elif obs['name'] == "Elias 29":
             # the data file from Sergio
-            df = pd.read_csv(obs["path"], delim_whitespace=True,
+            df = pd.read_csv(obs["path"], sep=r'\s+',
                                  names=["lambda (um)", "Flux (Jy)",
                                         "Sigma (Jy)", "AOT ident."], skiprows=6)
             # convert um to wavenumbers
@@ -290,7 +293,7 @@ class Fitter:
             # optical depth, fo is the observed flux, and fc is the continuum
             
             # read the continuum, taken from LIDA
-            cont = pd.read_csv("./data/all_SED/2.txt", delim_whitespace=True,
+            cont = pd.read_csv("./data/all_SED/2.txt", sep=r'\s+',
                                names=['wavenumber (um)', 'Flux (Jy)'])
             # we need Fo and Fc to match in wavenumber space, so interpolate
             interp_cont = np.interp(x=obs_df['lambda (um)'],
@@ -342,164 +345,14 @@ class Fitter:
         #print("The model name is: \n" + model_name)
 
         return obs, nonzero_components, model_name
-    
-    def _one_component_model(self, wavenumbers, w0):
+
+    def _n_component_model(self, wavenumbers, *P):
         """
-        Creates a one component model in a way that can be used with scipy's
-        curve_fit. The components must be in "spectra.json", and the weights there
-        will be overridden and computed based on the fit
+        Creates a model with any arbitrary number of components
         """
-        self.lab[0]['weight'] = w0
-
-        self.model = self._add_curves()
-
-        return self.model['tau']
-    
-    def _two_component_model(self, wavenumbers, w0, w1):
-        """
-        Creates a two component model in a way that can be used with scipy's
-        curve_fit. The components must be in "spectra.json", and the weights there
-        will be overridden and computed based on the fit
-        """
-        self.lab[0]['weight'] = w0
-        self.lab[1]['weight'] = w1
-
-        self.model = self._add_curves()
-
-        return self.model['tau']
-
-    def _three_component_model(self, wavenumbers, w0, w1, w2):
-        """
-        Creates a three component model in a way that can be used with scipy's
-        curve_fit. The components must be in "spectra.json", and the weights there
-        will be overridden and computed based on the fit
-        """
-        self.lab[0]['weight'] = w0
-        self.lab[1]['weight'] = w1
-        self.lab[2]['weight'] = w2
-
-        self.model = self._add_curves()
-
-        return self.model['tau']
-
-    def _four_component_model(self, wavenumbers, w0, w1, w2, w3):
-        """
-        Creates a four component model in a way that can be used with scipy's
-        curve_fit. The components must be in "spectra.json", and the weights there
-        will be overridden and computed based on the fit
-        """
-        self.lab[0]['weight'] = w0
-        self.lab[1]['weight'] = w1
-        self.lab[2]['weight'] = w2
-        self.lab[3]['weight'] = w3
-
-        self.model = self._add_curves()
-
-        return self.model['tau']
-
-    def _five_component_model(self, wavenumbers, w0, w1, w2, w3, w4):
-        """
-        Creates a five component model in a way that can be used with scipy's
-        curve_fit. The components must be in "spectra.json", and the weights there
-        will be overridden and computed based on the fit
-        """
-        self.lab[0]['weight'] = w0
-        self.lab[1]['weight'] = w1
-        self.lab[2]['weight'] = w2
-        self.lab[3]['weight'] = w3
-        self.lab[4]['weight'] = w4
-
-        self.model = self._add_curves()
-
-        return self.model['tau']
-
-    def _six_component_model(self, wavenumbers, w0, w1, w2, w3, w4, w5):
-        """
-        Creates a six component model in a way that can be used with scipy's
-        curve_fit. The components must be in "spectra.json", and the weights there
-        will be overridden and computed based on the fit
-        """
-        self.lab[0]['weight'] = w0
-        self.lab[1]['weight'] = w1
-        self.lab[2]['weight'] = w2
-        self.lab[3]['weight'] = w3
-        self.lab[4]['weight'] = w4
-        self.lab[5]['weight'] = w5
-
-        self.model = self._add_curves()
-
-        return self.model['tau']
-    
-    def _seven_component_model(self, wavenumbers, w0, w1, w2, w3, w4, w5, w6):
-        """
-        Creates a seven component model in a way that can be used with scipy's
-        curve_fit. The components must be in "spectra.json", and the weights there
-        will be overridden and computed based on the fit
-        """
-        self.lab[0]['weight'] = w0
-        self.lab[1]['weight'] = w1
-        self.lab[2]['weight'] = w2
-        self.lab[3]['weight'] = w3
-        self.lab[4]['weight'] = w4
-        self.lab[5]['weight'] = w5
-        self.lab[6]['weight'] = w6
-
-        self.model = self._add_curves()
-
-        return self.model['tau']
-    
-    def _eight_component_model(self, wavenumbers, w0, w1, w2, w3, w4, w5, w6, w7):
-        """
-        Creates an eight component model in a way that can be used with scipy's
-        curve_fit
-        """
-        self.lab[0]['weight'] = w0
-        self.lab[1]['weight'] = w1
-        self.lab[2]['weight'] = w2
-        self.lab[3]['weight'] = w3
-        self.lab[4]['weight'] = w4
-        self.lab[5]['weight'] = w5
-        self.lab[6]['weight'] = w6
-        self.lab[7]['weight'] = w7
-
-        self.model = self._add_curves()
-
-        return self.model['tau']
-    
-    def _nine_component_model(self, wavenumbers, w0, w1, w2, w3, w4, w5, w6, w7, w8):
-        """
-        Creates a nine component model in a way that can be used with scipy's
-        curve_fit
-        """
-        self.lab[0]['weight'] = w0
-        self.lab[1]['weight'] = w1
-        self.lab[2]['weight'] = w2
-        self.lab[3]['weight'] = w3
-        self.lab[4]['weight'] = w4
-        self.lab[5]['weight'] = w5
-        self.lab[6]['weight'] = w6
-        self.lab[7]['weight'] = w7
-        self.lab[8]['weight'] = w8
-
-        self.model = self._add_curves()
-
-        return self.model['tau']
-    
-    def _ten_component_model(self, wavenumbers, w0, w1, w2, w3, w4, w5, w6, w7, w8, w9):
-        """
-        Creates a ten component model in a way that can be used with scipy's
-        curve_fit
-        """
-        self.lab[0]['weight'] = w0
-        self.lab[1]['weight'] = w1
-        self.lab[2]['weight'] = w2
-        self.lab[3]['weight'] = w3
-        self.lab[4]['weight'] = w4
-        self.lab[5]['weight'] = w5
-        self.lab[6]['weight'] = w6
-        self.lab[7]['weight'] = w7
-        self.lab[8]['weight'] = w8
-        self.lab[9]['weight'] = w9
+        #print(P)
+        for i in range(0, len(P)):
+            self.lab[i]['weight'] = P[i]
 
         self.model = self._add_curves()
 
@@ -526,7 +379,8 @@ class Fitter:
                 this_tau = np.flip(this_tau)
 
 
-            interp_tau = np.interp(x=combined['wavenumber'], xp=this_wavenumber, fp=this_tau)
+            interp_tau = np.interp(x=combined['wavenumber'],
+                                   xp=this_wavenumber, fp=this_tau)
 
             # if this is the first curve added, just make it combined
             if not any(combined['tau']):
@@ -542,7 +396,13 @@ class Fitter:
         Calculate the fitted column density
         """
         for spec in self.lab:
-            spec['fitted_cd'] = spec['weight']*spec['lab column density']
+            if 'lab column density' in spec.keys():
+                spec['fitted_cd'] = spec['weight']*spec['lab column density']
+                spec['fitted_cd_err'] = (spec['weight_err']/spec['weight']) * \
+                                        spec['lab column density']
+            else:
+                spec['fitted_cd'] = None
+                spec['fitted_cd_err'] = None
 
     def plot_spectra(self, save_model=False, do_vlines=False, do_eval=True):
         """
@@ -592,9 +452,21 @@ class Fitter:
                          r"$R^2=$" + "{0:.4f}".format(r2))
 
         if save_model:
-            plt.savefig("./models/{0}.jpg".format(self.model_name.replace(" ", "_")), bbox_inches="tight")
+            plt.savefig("./models/{0}.jpg".format(
+                self.model_name.replace(" ", "_")), bbox_inches="tight")
         plt.close()
         return fig
+
+    def make_results_table(self):
+        results_list = []
+        for spec in self.lab:
+            this_row = {'name':spec['name'],
+                        'cd':spec['fitted_cd'],
+                        'cd_err':spec['fitted_cd_err']}
+            results_list.append(this_row)
+
+        self.results = pd.DataFrame(results_list)
+            
 
     def do_fit(self, bounds=(0, 100)):
         p0 = []
@@ -604,63 +476,14 @@ class Fitter:
         xdata = self.obs['df']['wavenumber']
         ydata = self.obs['df']['tau']
 
-        n = len(p0)
-        if n == 10:
-            popt, pcov = curve_fit(self._ten_component_model, xdata, ydata,
-                                   bounds=(0, 100), p0=p0)
-            model = self._ten_component_model(xdata, popt[0], popt[1], popt[2],
-                                        popt[3], popt[4], popt[5], popt[6],
-                                        popt[7], popt[8], popt[9])
-        elif n == 9:
-            popt, pcov = curve_fit(self._nine_component_model, xdata, ydata,
-                                   bounds=(0, 100), p0=p0)
-            model = self._nine_component_model(xdata, popt[0], popt[1], popt[2],
-                                        popt[3], popt[4], popt[5], popt[6],
-                                        popt[7], popt[8])
-        elif n == 8:
-            popt, pcov = curve_fit(self._eight_component_model, xdata, ydata,
-                                   bounds=(0, 100), p0=p0)
-            model = self._eight_component_model(xdata, popt[0], popt[1], popt[2],
-                                        popt[3], popt[4], popt[5], popt[6],
-                                        popt[7])
-        elif n == 7:
-            popt, pcov = curve_fit(self._seven_component_model, xdata, ydata,
-                                   bounds=(0, 100), p0=p0)
-            model = self._seven_component_model(xdata, popt[0], popt[1], popt[2],
-                                        popt[3], popt[4], popt[5], popt[6])
-        elif n == 6:
-            popt, pcov = curve_fit(self._six_component_model, xdata, ydata,
-                                   bounds=(0, 100), p0=p0)
-            model = self._six_component_model(xdata, popt[0], popt[1], popt[2],
-                                        popt[3], popt[4], popt[5])
-        elif n == 5:
-            popt, pcov = curve_fit(self._five_component_model, xdata, ydata,
-                                   bounds=(0, 100), p0=p0)
-            model = self._five_component_model(xdata, popt[0], popt[1],
-                                         popt[2], popt[3], popt[4])
-        elif n == 4:
-            popt, pcov = curve_fit(self._four_component_model, xdata, ydata,
-                                   bounds=(0, 100), p0=p0)
-            model = self._four_component_model(xdata, popt[0], popt[1],
-                                         popt[2], popt[3])
-        elif n == 3:
-            popt, pcov = curve_fit(self._three_component_model, xdata, ydata,
-                                   bounds=(0, 100), p0=p0)
-            model = self._three_component_model(xdata, popt[0], popt[1], popt[2])
-        elif n == 2:
-            popt, pcov = curve_fit(self._two_component_model, xdata, ydata,
-                                   bounds=(0, 100), p0=p0)
-            model = self._two_component_model(xdata, popt[0], popt[1])
-        elif n == 1:
-            popt, pcov = curve_fit(self._one_component_model, xdata, ydata,
-                                   bounds=(0, 100), p0=p0)
-            model = self._one_component_model(xdata, popt[0])
-        else:
-            print("{0} component model is not supported".format(n))
+        popt, pcov = curve_fit(self._n_component_model, xdata, ydata,
+                               bounds=(0, 100), p0=p0)
+        perr = np.sqrt(np.diag(pcov))
 
         # update the model with the new weights
         for i in range(0, len(self.lab)):
             self.lab[i]['weight'] = popt[i]
+            self.lab[i]['weight_err'] = perr[i]
 
         combined = self._add_curves()
 
@@ -674,12 +497,6 @@ class Fitter:
         self.p0 = p0
         
         # update the fitted column density
-        #self.column_density()
-        
-    def analyze_components(self):
-        """
-        Compute the column densities of the different componenets
-        """
+        self.column_density()
+        self.make_results_table()
 
-        for spec in self.lab:
-            spec['col_den'] = column_density(spec)
