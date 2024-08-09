@@ -29,6 +29,7 @@ import mist
 
 # the lower limit
 wn_min = 600
+# the upper limit:
 wn_max = 700
 
 # Create the fit model based on your configuration file
